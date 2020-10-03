@@ -5,11 +5,15 @@
     <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/3.4.1/css/bootstrap.min.css">
     <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.5.1/jquery.min.js"></script>
     <script src="https://maxcdn.bootstrapcdn.com/bootstrap/3.4.1/js/bootstrap.min.js"></script>
+    <script src="//unpkg.com/three"></script>
+    <script src="//unpkg.com/three-spritetext"></script>
+    <script src="//unpkg.com/3d-force-graph"></script>
+
 </head>
 
 <body>
     <div class="container">
-        <h2>hello-world-network-cdp-webapp</h2>
+        <h2>hello-world-network-cdp3d-webapp</h2>
 
         {% if posted_data["data"]["task_status"] == "finished" %}
         <style>
@@ -42,101 +46,69 @@
         </style>
 
         <body>
-
-            <script src="https://d3js.org/d3.v3.min.js"></script>
+            <div id="3d-graph"></div>
             <script>
-                console.log({{ posted_data| tojson}});
-                // http://blog.thomsonreuters.com/index.php/mobile-patent-suits-graphic-of-the-day/
                 var links = [
                 {% if "neighbor" in posted_data | tojson %}
                 {% for device in posted_data["data"]["task_result"] %}
                 {% for cdpneigh in device["data"]["data"]["task_result"]["show cdp neighbors"] %}
-                { source: '{{ device["host"] }}', target: '{{ device["host"] }}_{{ cdpneigh["local_interface"] }}', type: "port" },
-                { source: '{{ device["host"] }}_{{ cdpneigh["local_interface"] }}', target: '{{ cdpneigh["neighbor"] }}_{{ cdpneigh["neighbor_interface"] }}', type: "connection" },
-                { source: '{{ cdpneigh["neighbor"] }}', target: '{{ cdpneigh["neighbor"] }}_{{ cdpneigh["neighbor_interface"] }}', type: "port" },
+                { source: '{{ device["host"] }}', target: '{{ device["host"] }}_{{ cdpneigh["local_interface"] }}', value: 2, color: "grey"},
+                { source: '{{ device["host"] }}_{{ cdpneigh["local_interface"] }}', target: '{{ cdpneigh["neighbor"] }}_{{ cdpneigh["neighbor_interface"] }}', value: 5 , color: "blue"},
+                { source: '{{ cdpneigh["neighbor"] }}', target: '{{ cdpneigh["neighbor"] }}_{{ cdpneigh["neighbor_interface"] }}', value: 2 , color: "grey"},
                 {% endfor %}
                 {% endfor %}
                 {% endif %}
                 ];
 
-                var nodes = {};
+                var nodes = {
+                {% if "neighbor" in posted_data | tojson %}
+                {% for device in posted_data["data"]["task_result"] %}
+                {% for cdpneigh in device["data"]["data"]["task_result"]["show cdp neighbors"] %}
+                '{{ device["host"] }}':1,
+                '{{ device["host"] }}_{{ cdpneigh["local_interface"] }}': 2,
+                '{{ cdpneigh["neighbor"] }}_{{ cdpneigh["neighbor_interface"] }}': 2,
+                '{{ cdpneigh["neighbor"] }}': 1,
+                {% endfor %}
+                {% endfor %}
+                {% endif %}
+                };
 
-                // Compute the distinct nodes from the links.
-                links.forEach(function (link) {
-                    link.source = nodes[link.source] || (nodes[link.source] = { name: link.source });
-                    link.target = nodes[link.target] || (nodes[link.target] = { name: link.target });
+                var nodeResult = [];
+                $.each(nodes, function( index, val ) {
+                    nodeResult.push({id:index, group:val})
                 });
 
-                var width = screen.width - 50,
-                    height = screen.height - 200;
+                const gData = {
+                nodes: nodeResult,
+                links: links
+                };
 
-                var force = d3.layout.force()
-                    .nodes(d3.values(nodes))
-                    .links(links)
-                    .size([width, height])
-                    .linkDistance(100)
-                    .charge(-2000)
-                    .on("tick", tick)
-                    .start();
+                var uniquenames = [];
+                const Graph = ForceGraph3D()
+                (document.getElementById('3d-graph'))
+                    .graphData(gData)
+                    .nodeAutoColorBy('group')
+                    .backgroundColor('#fff')
+                    .nodeThreeObject(node => {
+                    // use a sphere as a drag handle
+                    const obj = new THREE.Mesh(
+                        new THREE.SphereGeometry(10),
+                        new THREE.MeshBasicMaterial({ depthWrite: false, transparent: true, opacity: 0 })
+                    );
 
-                var svg = d3.select("body").append("svg")
-                    .attr("width", width)
-                    .attr("height", height);
+                    // add text sprite as child
+                    const sprite = new SpriteText(node.id);
+                    sprite.color = node.color;
+                    sprite.textHeight = 10;
+                    obj.add(sprite);
+                    return obj;
+                    });
 
-                // Per-type markers, as they don't inherit styles.
-                svg.append("defs").selectAll("marker")
-                    .data(["suit", "licensing", "resolved"])
-                    .enter().append("marker")
-                    .attr("id", function (d) { return d; })
-                    .attr("viewBox", "0 -5 10 10")
-                    .attr("refX", 15)
-                    .attr("refY", -1.5)
-                    .attr("markerWidth", 6)
-                    .attr("markerHeight", 6)
-                    .attr("orient", "auto")
-                    .append("path")
-                    .attr("d", "M0,-5L10,0L0,5");
+                // Spread nodes a little wider
+                Graph.d3Force('charge').strength(-400);
 
-                var path = svg.append("g").selectAll("path")
-                    .data(force.links())
-                    .enter().append("path")
-                    .attr("class", function (d) { return "link " + d.type; })
-                    .attr("marker-end", function (d) { return "url(#" + d.type + ")"; });
-
-                var circle = svg.append("g").selectAll("circle")
-                    .data(force.nodes())
-                    .enter().append("circle")
-                    .attr("r", 12)
-                    .on("click", function (d) {
-                        //{#window.open("{{ url_for('generate_map') }}" + "?cct=" + d.name);#}
-                    })
-                    .call(force.drag);
-
-                var text = svg.append("g").selectAll("text")
-                    .data(force.nodes())
-                    .enter().append("text")
-                    .attr("x", 20)
-                    .attr("y", ".31em")
-                    .text(function (d) { return d.name; });
-
-                // Use elliptical arc path segments to doubly-encode directionality.
-                function tick() {
-                    path.attr("d", linkArc);
-                    circle.attr("transform", transform);
-                    text.attr("transform", transform);
-                }
-
-                function linkArc(d) {
-                    var dx = d.target.x - d.source.x,
-                        dy = d.target.y - d.source.y,
-                        dr = Math.sqrt(dx * dx + dy * dy);
-                    return "M" + d.source.x + "," + d.source.y + "A" + dr + "," + dr + " 0 0,1 " + d.target.x + "," + d.target.y;
-                }
-
-                function transform(d) {
-                    return "translate(" + d.x + "," + d.y + ")";
-                }
             </script>
+
             {% else %}
             <p>loading...</p>
             <script>
@@ -148,7 +120,6 @@
                 });
             </script>
             {% endif %}
-    </div>
 </body>
 
 </html>
