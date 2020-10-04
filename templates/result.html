@@ -48,13 +48,14 @@
         <body>
             <div id="3d-graph"></div>
             <script>
+
                 var links = [
                 {% if "neighbor" in posted_data | tojson %}
                 {% for device in posted_data["data"]["task_result"] %}
                 {% for cdpneigh in device["data"]["data"]["task_result"]["show cdp neighbors"] %}
                 { source: '{{ device["host"] }}', target: '{{ device["host"] }}_{{ cdpneigh["local_interface"] }}', value: 2, color: "grey"},
                 { source: '{{ device["host"] }}_{{ cdpneigh["local_interface"] }}', target: '{{ cdpneigh["neighbor"] }}_{{ cdpneigh["neighbor_interface"] }}', value: 5 , color: "blue"},
-                { source: '{{ cdpneigh["neighbor"] }}', target: '{{ cdpneigh["neighbor"] }}_{{ cdpneigh["neighbor_interface"] }}', value: 2 , color: "grey"},
+                { source: '{{ cdpneigh["neighbor"] }}', target: '{{ cdpneigh["neighbor"] }}_{{ cdpneigh["neighbor_interface"] }}', value: 2 , color: "grey", width: 10},
                 {% endfor %}
                 {% endfor %}
                 {% endif %}
@@ -89,24 +90,27 @@
                     .graphData(gData)
                     .nodeAutoColorBy('group')
                     .backgroundColor('#fff')
+                    .cooldownTicks(500)
                     .nodeThreeObject(node => {
                     // use a sphere as a drag handle
                     const obj = new THREE.Mesh(
-                        new THREE.SphereGeometry(10),
+                        new THREE.SphereGeometry(0),
                         new THREE.MeshBasicMaterial({ depthWrite: false, transparent: true, opacity: 0 })
                     );
 
                     // add text sprite as child
                     const sprite = new SpriteText(node.id);
                     sprite.color = node.color;
-                    sprite.textHeight = 10;
+                    sprite.textHeight = 5;
                     obj.add(sprite);
                     return obj;
                     });
 
                 // Spread nodes a little wider
                 Graph.d3Force('charge').strength(-400);
+                Graph.onEngineStop(() => Graph.zoomToFit(600));
 
+                
             </script>
 
             {% else %}
